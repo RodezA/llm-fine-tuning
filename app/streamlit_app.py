@@ -16,7 +16,10 @@ import json
 import pandas as pd
 import streamlit as st
 
-from app.stub_models import stub_predict
+try:
+    from app.stub_models import stub_predict
+except ModuleNotFoundError:
+    from stub_models import stub_predict  # type: ignore[no-redef]
 
 
 def _build_samples() -> dict[str, dict]:
@@ -163,9 +166,5 @@ def main() -> None:
     _render_model_column(tuned_col, "Fine-tuned model", tuned_spec, bound_df)
 
 
-if __name__ != "app.streamlit_app":
-    # Streamlit executes the script with ``__name__ == "__main__"``, while
-    # ``import app.streamlit_app`` from tests sets it to ``app.streamlit_app``.
-    # Calling ``main`` only outside the package import path keeps the module
-    # safe to import without a Streamlit ScriptRunContext.
+if __name__ not in ("app.streamlit_app", "streamlit_app"):
     main()
