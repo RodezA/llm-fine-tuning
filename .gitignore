@@ -1,0 +1,38 @@
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual envs
+.venv/
+venv/
+
+# ML artifacts
+checkpoints/
+outputs/
+runs/
+wandb/
+data/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Notebook outputs
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
