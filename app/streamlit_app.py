@@ -115,7 +115,7 @@ def _render_model_column(
 ) -> None:
     with column:
         st.subheader(title)
-        st.vega_lite_chart(spec, data=df, use_container_width=True)
+        st.vega_lite_chart(data=df, spec=spec, use_container_width=True)
         st.code(json.dumps(spec, indent=2), language="json")
 
 
