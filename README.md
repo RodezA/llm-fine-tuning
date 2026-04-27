@@ -4,6 +4,10 @@ A focused, demo-oriented toolkit for fine-tuning a small open-weights LLM to tra
 
 The project covers the full lifecycle — **curate → fine-tune → evaluate → demo** — and runs end-to-end on free infrastructure: free-tier Colab GPU for training, local CPU or Apple Silicon (MPS) for evaluation and the demo, open-licensed models and datasets throughout.
 
+## Demo
+
+[Live demo on Streamlit Community Cloud](https://llm-fine-tuning-jkrrznyhh4hswqchybn8an.streamlit.app/)
+
 ## Why this project
 
 Most fine-tuning examples stop at "the loss curve went down." This harness emphasises what comes after: a decoupled eval suite that scores any model — base, fine-tuned, or an alternative — against the same task, so the lift from fine-tuning is measurable rather than asserted.
