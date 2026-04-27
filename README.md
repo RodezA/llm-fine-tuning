@@ -112,6 +112,8 @@ uv run streamlit run app/streamlit_app.py
 
 Side-by-side chart and JSON-spec rendering for a base and a fine-tuned model on a handful of sample questions, with a free-form override box.
 
+The app can also be deployed publicly for free via [Streamlit Community Cloud](https://streamlit.io/cloud) — connect the GitHub repo, set `app/streamlit_app.py` as the entry point, and add `HF_TOKEN` as a secret.
+
 ## Project layout
 
 ```
