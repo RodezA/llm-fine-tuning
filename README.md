@@ -6,6 +6,50 @@ The task: given a plain-English question and a small table, generate a valid [Ve
 
 **[→ Live demo](https://llm-fine-tuning-jkrrznyhh4hswqchybn8an.streamlit.app/)** — pick a sample question, see both the rendered chart and the raw Vega-Lite JSON for the base and fine-tuned models side by side.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    SRC[(nvBench dataset\n25k NL → chart pairs\nMIT-licensed)]
+
+    SRC --> CUR
+
+    subgraph CUR["① Curate  ·  curate/"]
+        C1["Normalise gold specs\nto Vega-Lite v5"]
+        C2["Validate against\nofficial JSON schema"]
+        C3[("train.jsonl\ntest.jsonl")]
+        C1 --> C2 --> C3
+    end
+
+    C3 --> FT
+    C3 --> EV
+
+    subgraph FT["② Fine-tune  ·  train/  ·  Colab T4"]
+        F1["4-bit QLoRA\nGemma 2 2B Instruct"]
+        F2[("LoRA adapter\n→ Hugging Face Hub")]
+        F1 --> F2
+    end
+
+    BASE["Base model\ngoogle/gemma-2-2b-it"]
+
+    BASE --> EV
+    F2  --> EV
+
+    subgraph EV["③ Evaluate  ·  evals/"]
+        E1["score_model(predict_fn, test.jsonl)"]
+        E2["JSON report\nvalidity · mark acc · encoding acc\nhallucination rate · latency"]
+        E1 --> E2
+    end
+
+    F2 --> DEMO
+
+    subgraph DEMO["④ Demo  ·  app/"]
+        D1["Streamlit app\nbase vs fine-tuned side by side"]
+        D2["Rendered Vega-Lite chart\n+ raw JSON spec"]
+        D1 --> D2
+    end
+```
+
 ## Why this task
 
 Natural-language → Vega-Lite is a clean structured-output target with automatic correctness checks:
