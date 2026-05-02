@@ -6,15 +6,31 @@ The task: given a plain-English question and a small table, generate a valid [Ve
 
 **[→ Live demo](https://llm-fine-tuning-jkrrznyhh4hswqchybn8an.streamlit.app/)** — pick a sample question, see both the rendered chart and the raw Vega-Lite JSON for the base and fine-tuned models side by side.
 
-## Why this task
+## Why this project matters
 
-Natural-language → Vega-Lite is a clean structured-output target with automatic correctness checks:
+Most fine-tuning tutorials hand you a loss curve and call it done. This project goes further: it defines what "better" actually means, measures it automatically, and makes the lift visible to anyone who opens the demo. That end-to-end rigor — curate, train, measure, show — is what separates a reproducible result from a vibes-based claim.
 
-- Every prediction must parse as valid JSON and validate against the published Vega-Lite v5 schema.
-- It must reference columns that actually exist in the supplied table — any invented column name is a measurable hallucination.
-- The mark type (`bar`, `line`, `point`, …) is a clean proxy for "tool selection"; the encoding fields are the tool arguments.
+**The task is a perfect stress test for structured-output fine-tuning.** Natural-language → Vega-Lite gives you automatic correctness at every layer:
 
-All of that is checkable without human annotation, so base-vs-tuned comparisons are rigorous rather than eyeballed.
+- The output must parse as valid JSON and pass the published Vega-Lite v5 schema — no human grader needed for the correctness floor.
+- Every field reference must match a column that actually exists in the supplied table — any invented name is a measurable hallucination, caught programmatically.
+- The `mark` type (`bar`, `line`, `point`, …) is a clean proxy for tool selection; the encoding channels are the tool arguments. Fine-tuning can be scored on both independently.
+
+That lets the eval suite produce hard numbers — not impressions — for every model you throw at it.
+
+**The methodology transfers directly to any structured-output problem.** Swap the dataset and schema, keep the pipeline:
+
+| Domain | NL input | Structured target | Auto-checkable signals |
+|--------|----------|-------------------|------------------------|
+| Data analytics | Plain-English question | Vega-Lite chart spec *(this project)* | Schema validity, column hallucination, mark type |
+| Database tooling | Plain-English query | SQL | Syntax validity, table/column hallucination, query equivalence |
+| API automation | User intent | REST / GraphQL call | Schema validity, required fields, auth scope |
+| UI generation | Feature description | React / Tailwind component | Linting, prop type checking, render errors |
+| Config management | Plain-English policy | YAML / JSON config | Schema validation, value-range checks |
+
+The curate → fine-tune → evaluate → demo skeleton is reusable as-is. Replace `curate/prepare.py` with your own data pipeline, point the eval runner at your schema, and you have a rigorous fine-tuning harness for any task where correctness is checkable without annotation.
+
+**It runs entirely on free infrastructure.** Training on a free Colab T4 with 4-bit QLoRA keeps the GPU cost at zero. Eval and the demo run on local CPU or Apple Silicon. Every model and dataset is openly licensed. There are no paid API calls anywhere in the pipeline — which means the full experiment is reproducible by anyone with a laptop and a Google account.
 
 ## Pipeline
 
