@@ -1,13 +1,18 @@
-"""Placeholder stub model used in the demo until the fine-tuned LoRA adapter is trained.
+"""Stub and real-model backends for the Streamlit demo.
 
-Do NOT use these heuristics for evaluation. They exist only so the Streamlit demo can
-show a side-by-side "base vs. tuned" rendering of Vega-Lite specs while the real model
-is still being curated and trained. The "tuned" branch is intentionally a strict
-super-set of the "base" branch so the UI shows a visible improvement.
+``stub_predict`` is a keyword-driven heuristic used while the fine-tuned adapter
+is not yet available.  ``model_predict`` loads a LoRA adapter from the Hugging Face
+Hub and calls the model; it is only reachable when ``HF_MODEL_ID`` is set in the
+environment and the heavy ML dependencies are installed.
+
+Do NOT use ``stub_predict`` for evaluation — it exists only so the demo renders
+something meaningful in the cloud deployment before a trained adapter exists.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Literal
 
 import pandas as pd
@@ -85,8 +90,11 @@ def stub_predict(
     intent = _classify_question(question)
 
     # --- Mark selection ----------------------------------------------------
+    # Base stub: defaults to bar for everything — simulates a model that hasn't
+    # learned the temporal-trend → line mapping that fine-tuning teaches.
+    # Tuned stub: correct mark for each intent.
     if intent == "trend" and temporal and quantitative:
-        base_mark = "line"
+        base_mark = "bar"
         tuned_mark = "line"
     elif intent == "distribution" and quantitative:
         base_mark = "bar"
@@ -95,7 +103,6 @@ def stub_predict(
         base_mark = "bar"
         tuned_mark = "bar"
     else:
-        # Ambiguous: tuned makes a more thoughtful pick.
         base_mark = "bar"
         tuned_mark = "line" if temporal and quantitative else "bar"
 
@@ -110,16 +117,31 @@ def stub_predict(
     if y_field is not None:
         encoding["y"] = {"field": y_field, "type": y_type}
 
-    # The "tuned" model adds a color channel when a sensible categorical column
-    # is available and isn't already on the x-axis.
-    if model == "tuned" and nominal and nominal != x_field:
-        encoding["color"] = {"field": nominal, "type": "nominal"}
-    if model == "tuned" and intent == "distribution" and quantitative:
-        # Bin the quantitative axis for a true histogram look.
-        encoding["x"] = {"field": quantitative, "type": "quantitative", "bin": True}
-        encoding["y"] = {"aggregate": "count", "type": "quantitative"}
+    if model == "tuned":
+        # Correct chart type for trend: line + point overlay so individual values
+        # are visible, plus tooltip for interactivity.
+        if intent == "trend" and temporal and quantitative:
+            encoding["x"] = {"field": x_field, "type": "temporal", "title": x_field}
+            encoding["y"] = {"field": y_field, "type": "quantitative", "title": y_field}
+            if x_field and y_field:
+                encoding["tooltip"] = [
+                    {"field": x_field, "type": "temporal"},
+                    {"field": y_field, "type": "quantitative"},
+                ]
 
-    mark = base_mark if model == "base" else tuned_mark
+        # Add color channel when a sensible categorical column exists.
+        if nominal and nominal != x_field:
+            encoding["color"] = {"field": nominal, "type": "nominal"}
+
+        # Bin quantitative axis for a true histogram look.
+        if intent == "distribution" and quantitative:
+            encoding["x"] = {"field": quantitative, "type": "quantitative", "bin": True}
+            encoding["y"] = {"aggregate": "count", "type": "quantitative"}
+
+    mark = base_mark if model == "base" else (
+        {"type": "line", "point": True} if (model == "tuned" and intent == "trend" and temporal and quantitative)
+        else tuned_mark
+    )
 
     spec: dict = {
         "$schema": VEGA_LITE_SCHEMA,
@@ -127,6 +149,108 @@ def stub_predict(
         "encoding": encoding,
     }
     return spec
+
+
+# ---------------------------------------------------------------------------
+# Real-model inference (requires HF_MODEL_ID env var + ML deps installed)
+# ---------------------------------------------------------------------------
+
+_SYSTEM = (
+    "You are a data visualization assistant. Given a natural-language question and a "
+    "table schema, output a minimal Vega-Lite v5 JSON specification that answers the "
+    "question. Return only valid JSON — no explanation, no markdown fences."
+)
+
+
+def _schema_to_text(schema: list[dict]) -> str:
+    lines = [f"  {col['name']} ({col['type']})" for col in schema]
+    return "Table columns:\n" + "\n".join(lines)
+
+
+def _build_prompt(question: str, schema: list[dict]) -> str:
+    return (
+        f"{_SYSTEM}\n\n{_schema_to_text(schema)}\n\nQuestion: {question}\n\nVega-Lite spec:"
+    )
+
+
+def _parse_spec(text: str) -> dict:
+    """Extract a JSON object from model output, tolerating leading/trailing prose."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
+def model_predict(
+    question: str,
+    schema: list[dict],
+    adapter_id: str,
+    *,
+    max_new_tokens: int = 256,
+    temperature: float = 0.1,
+) -> dict:
+    """Generate a Vega-Lite spec using the trained LoRA adapter.
+
+    The model and tokenizer are loaded once and cached by Streamlit.  Returns an
+    empty dict (and lets the caller fall back to stub) if anything goes wrong.
+    """
+    try:
+        import streamlit as st
+        import torch
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        @st.cache_resource(show_spinner="Loading model…")
+        def _load(aid: str):
+            base = "google/gemma-2-2b-it"
+            tok = AutoTokenizer.from_pretrained(aid)
+            tok.pad_token = tok.eos_token
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            mdl = AutoModelForCausalLM.from_pretrained(
+                base,
+                torch_dtype=torch.float32,
+                device_map=device,
+                attn_implementation="eager",
+            )
+            mdl = PeftModel.from_pretrained(mdl, aid)
+            mdl.eval()
+            return mdl, tok
+
+        model, tokenizer = _load(adapter_id)
+
+        messages = [{"role": "user", "content": _build_prompt(question, schema)}]
+        prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                do_sample=temperature > 0,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+        generated = tokenizer.decode(
+            output_ids[0][inputs["input_ids"].shape[1]:],
+            skip_special_tokens=True,
+        )
+        return _parse_spec(generated)
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Axis helpers (used by stub_predict)
+# ---------------------------------------------------------------------------
 
 
 def _pick_axes(
